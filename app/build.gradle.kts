@@ -91,7 +91,9 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = file("release.keystore")
+            // 默认用仓库里的上游公共密钥（可复现构建）；
+            // 在 local.properties 设 KEYSTORE_FILE 可换成自己的私有密钥
+            storeFile = file(getProps("KEYSTORE_FILE").ifEmpty { "release.keystore" })
             storePassword = getProps("KEYSTORE_PASS")
             keyAlias = getProps("ALIAS_NAME")
             keyPassword = getProps("ALIAS_PASS")
@@ -105,7 +107,9 @@ android {
             }
         }
         release {
-            isMinifyEnabled = true
+            // v0.1.0 发布时未在真机验证过 R8 产物，暂不混淆，保持与 debug 包行为一致；
+            // 确认无误后可改回 true
+            isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("release")
             vcsInfo.include = false
