@@ -8,6 +8,8 @@ object SettingsKey {
     const val UPDATE_SOURCE = "update_source"
     const val UPDATE_TRACK = "update_track"
     const val GITHUB_TOKEN = "github_token"
+    const val TS_AUTH_KEY = "ts_auth_key"
+    const val TAILNET_UPDATE_URL = "tailnet_update_url"
     const val FDROID_MIRROR_URL = "fdroid_mirror_url"
     const val FDROID_CUSTOM_MIRRORS = "fdroid_custom_mirrors"
     const val SILENT_INSTALL_ENABLED = "silent_install_enabled"

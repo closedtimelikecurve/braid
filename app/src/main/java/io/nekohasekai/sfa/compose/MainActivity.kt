@@ -147,6 +147,8 @@ import io.nekohasekai.sfa.constant.Status
 import io.nekohasekai.sfa.database.Settings
 import io.nekohasekai.sfa.ktx.hasPermission
 import io.nekohasekai.sfa.ktx.launchCustomTab
+import io.nekohasekai.sfa.update.TailnetUpdater
+import io.nekohasekai.sfa.update.UpdateInfo
 import io.nekohasekai.sfa.update.UpdateState
 import io.nekohasekai.sfa.utils.RemoteControlManager
 import io.nekohasekai.sfa.vendor.Vendor
@@ -236,15 +238,26 @@ class MainActivity :
             RemoteControlManager.restore()
 
             UpdateState.loadFromCache()
-            if (Settings.checkUpdateEnabled) {
-                lifecycleScope.launch(Dispatchers.IO) {
-                    try {
-                        val updateInfo = Vendor.checkUpdateAsync()
-                        UpdateState.setUpdate(updateInfo)
-                    } catch (_: Exception) {
-                        UpdateState.setUpdate(null)
-                    }
+            // 每次打开就静默查一次更新：走 tailnet 自建源，拉不到就无声跳过。
+            //
+            // 要重试是因为时序：应用刚打开时 VPN 可能还没建起来，这时手机还连不上 tailnet
+            // （tailscale 端点在 VPN 里跑），直连开发机必然失败。等它起来再试几轮。
+            lifecycleScope.launch(Dispatchers.IO) {
+                var info: UpdateInfo? = null
+                for (attempt in 0 until 5) {
+                    if (attempt > 0) delay(8_000L)
+                    info = runCatching { TailnetUpdater.checkForUpdate() }.getOrNull()
+                    if (info != null) break
                 }
+                if (info == null) {
+                    // tailnet 一直连不上，退回原来的 GitHub / F-Droid 渠道
+                    info = runCatching { Vendor.checkUpdateAsync() }.getOrNull()
+                }
+                // 清单拉到了但版本不比已装的新：视同无更新。
+                // 弹窗条件只对比 lastShownUpdateVersion，不挡同版本，
+                // 不在这里过滤的话每次打开应用都会弹一次「更新到当前版本」
+                info = info?.takeIf { it.versionCode > BuildConfig.VERSION_CODE }
+                UpdateState.setUpdate(info)
             }
 
             handleIntent(intent)
@@ -639,54 +652,9 @@ class MainActivity :
             )
         }
 
-        // Handle update check prompt dialog (shown only once on first launch)
-        var showUpdateCheckPrompt by remember { mutableStateOf(!Settings.updateCheckPrompted) }
-        if (showUpdateCheckPrompt) {
-            AlertDialog(
-                onDismissRequest = {
-                    Settings.updateCheckPrompted = true
-                    showUpdateCheckPrompt = false
-                },
-                title = { Text(stringResource(R.string.check_update)) },
-                text = {
-                    MarkdownText(
-                        markdown = stringResource(
-                            if (BuildConfig.FLAVOR == "play") {
-                                R.string.check_update_prompt_play
-                            } else {
-                                R.string.check_update_prompt_github
-                            },
-                        ),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                },
-                confirmButton = {
-                    TextButton(onClick = {
-                        Settings.updateCheckPrompted = true
-                        Settings.checkUpdateEnabled = true
-                        showUpdateCheckPrompt = false
-                        scope.launch(Dispatchers.IO) {
-                            try {
-                                val result = Vendor.checkUpdateAsync()
-                                UpdateState.setUpdate(result)
-                            } catch (_: Exception) {
-                                UpdateState.setUpdate(null)
-                            }
-                        }
-                    }) {
-                        Text(stringResource(R.string.ok))
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = {
-                        Settings.updateCheckPrompted = true
-                        showUpdateCheckPrompt = false
-                    }) {
-                        Text(stringResource(R.string.no_thanks))
-                    }
-                },
-            )
-        }
+        // 「检查更新」首启弹窗已移除：本项目是自维护分支，不接受上游更新，
+        // 弹窗只会误导用户去装官方 SFA。checkUpdateEnabled 默认 false，
+        // 因此下面的「发现新版本」弹窗也不会再出现。
 
         // Handle update available dialog
         val updateInfo by UpdateState.updateInfo

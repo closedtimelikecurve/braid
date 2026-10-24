@@ -10,6 +10,8 @@ build/
 .cxx
 local.properties
 /app/libs/
+/app/build-out/
+/version.properties
 /service-account-credentials.json
 /CLAUDE.md
 /.claude/

@@ -12,6 +12,7 @@ import io.nekohasekai.sfa.bg.RootClient
 import io.nekohasekai.sfa.compose.screen.qrscan.QRCodeCropArea
 import io.nekohasekai.sfa.database.Settings
 import io.nekohasekai.sfa.update.UpdateCheckException
+import io.nekohasekai.sfa.update.TailnetUpdater
 import io.nekohasekai.sfa.update.UpdateInfo
 import io.nekohasekai.sfa.update.UpdateSource
 import io.nekohasekai.sfa.update.UpdateState
@@ -99,12 +100,17 @@ object Vendor : VendorInterface {
 
     override val updateSources = listOf(UpdateSource.GITHUB, UpdateSource.FDROID)
 
-    override fun checkUpdateAsync(): UpdateInfo? = when (UpdateSource.fromString(Settings.updateSource)) {
-        UpdateSource.FDROID -> checkFDroidUpdate(Application.application)
-        UpdateSource.GITHUB -> {
-            val track = UpdateTrack.fromString(Settings.updateTrack)
-            GitHubUpdateChecker().use { checker ->
-                checker.checkUpdate(track, Settings.githubToken)
+    override fun checkUpdateAsync(): UpdateInfo? {
+        // 优先走 tailnet 上的自建更新源：版本号和这个分支对得上，也不会把人引去官方 SFA。
+        // 拉不到（没连 tailnet / 开发机没开）再退回原来的 GitHub / F-Droid。
+        TailnetUpdater.checkForUpdate()?.let { return it }
+        return when (UpdateSource.fromString(Settings.updateSource)) {
+            UpdateSource.FDROID -> checkFDroidUpdate(Application.application)
+            UpdateSource.GITHUB -> {
+                val track = UpdateTrack.fromString(Settings.updateTrack)
+                GitHubUpdateChecker().use { checker ->
+                    checker.checkUpdate(track, Settings.githubToken)
+                }
             }
         }
     }

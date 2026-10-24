@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
     <!-- App -->
-    <string name="app_name" translatable="false">sing-box</string>
+    <string name="app_name" translatable="false">Braid</string>
     <string name="app_version_title">App version</string>
     <string name="language">Language</string>
     <string name="system_default">System default</string>
@@ -743,4 +743,12 @@
     <string name="endpoint_browser_navigation_failed">Browser navigation failed: %1$s</string>
     <string name="endpoint_browser_too_many_windows">The authentication page opened too many browser windows.</string>
     <string name="endpoint_browser_profile_unavailable">Browser authentication is unavailable on this device.</string>
+    <string name="ts_auth_key">Tailscale auth key</string>
+    <string name="ts_auth_key_set">Configured (%1$s). Applies after the service restarts.</string>
+    <string name="ts_auth_key_not_set">Not configured. Leave empty to log in interactively from the Tailscale endpoint page.</string>
+    <string name="ts_auth_key_description">Paste a reusable auth key (generate at login.tailscale.com → Settings → Keys). Leave empty to log in interactively. Applies after the service restarts.</string>
+    <string name="ts_auth_key_clear">Clear</string>
+    <string name="self_update_url">Self-hosted update source</string>
+    <string name="self_update_url_not_set">Not configured. The app falls back to upstream channels (GitHub / F-Droid).</string>
+    <string name="self_update_url_description">Full URL of a version.json manifest served by your own machine, e.g. http://192.168.1.10:8088/braid/version.json. Leave empty to disable. See the repository wiki for how to publish updates.</string>
 </resources>

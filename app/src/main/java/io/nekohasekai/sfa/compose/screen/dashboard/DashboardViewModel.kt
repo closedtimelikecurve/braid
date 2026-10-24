@@ -205,36 +205,11 @@ class DashboardViewModel :
     }
 
     private fun checkDeprecatedNotes() {
-        viewModelScope.launch(Dispatchers.IO) {
-            runCatching {
-                // Check if deprecated warnings are disabled
-                if (Settings.disableDeprecatedWarnings) {
-                    return@launch
-                }
-
-                val notes = Libbox.newStandaloneCommandClient().deprecatedNotes
-                if (notes.hasNext()) {
-                    val notesList = mutableListOf<DashboardUiState.DeprecatedNote>()
-                    while (notes.hasNext()) {
-                        val note = notes.next()
-                        notesList.add(
-                            DashboardUiState.DeprecatedNote(
-                                message = note.message(),
-                                migrationLink = note.migrationLink,
-                            ),
-                        )
-                    }
-                    withContext(Dispatchers.Main) {
-                        updateState {
-                            copy(
-                                deprecatedNotes = notesList,
-                                showDeprecatedDialog = notesList.isNotEmpty(),
-                            )
-                        }
-                    }
-                }
-            }
-        }
+        // 弃用警告弹窗已永久关闭：本项目固定使用自编内核，配置写法也由
+        // TsConfigMerger 统一迁移，内核那套「某选项将在 1.17 移除」的提示
+        // 对最终用户没有意义，只会在每次启动/切配置时打断操作。
+        // 需要临时找回时把 Settings.disableDeprecatedWarnings 逻辑恢复即可。
+        return
     }
 
     fun toggleService() {

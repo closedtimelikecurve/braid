@@ -56,6 +56,12 @@ object Settings {
         }
     }
     var githubToken by dataStore.string(SettingsKey.GITHUB_TOKEN) { "" }
+
+    /** tailscale auth key，前端「应用设置 → Tailscale」里填；空 = 交互式登录 */
+    var tsAuthKey by dataStore.string(SettingsKey.TS_AUTH_KEY) { "" }
+
+    /** 自建更新清单的完整 URL；空 = 不检查自建源，退回上游渠道 */
+    var tailnetUpdateUrl by dataStore.string(SettingsKey.TAILNET_UPDATE_URL) { "" }
     var silentInstallEnabled by dataStore.boolean(SettingsKey.SILENT_INSTALL_ENABLED) { false }
     var silentInstallMethod by dataStore.string(SettingsKey.SILENT_INSTALL_METHOD) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {

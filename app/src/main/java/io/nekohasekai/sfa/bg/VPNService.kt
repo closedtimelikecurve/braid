@@ -22,6 +22,20 @@ class VPNService :
     PlatformInterfaceWrapper {
     companion object {
         private const val TAG = "VPNService"
+
+        /**
+         * 是否让 tun 承载 IPv6。
+         *
+         * 关着 —— 手机侧经常没有可用 IPv6，而 App（抖音等）会缓存 v6 地址并优先连接。
+         * tun 一旦有 v6 地址，这些 connect 会「先进入 tun、再在出站时静默失败」，
+         * App 认为地址没死、一直重试，表现就是视频/图片永远加载不出来。
+         * 不宣告 v6，connect 立刻 ENETUNREACH，App 才会正常降级到 IPv4。
+         *
+         * 注意：tailnet 的 fd7a::/48 走的是 tailscale endpoint 自身的用户态，
+         * 不依赖 tun 的 v6，关掉不影响 tailscale 连接。
+         */
+        private const val ENABLE_TUN_IPV6 = false
+
     }
 
     private val service = BoxService(this, this)
@@ -77,6 +91,9 @@ class VPNService :
             builder.addAddress(address.address(), address.prefix())
         }
 
+        // v6 地址必须照加：sing-tun 的栈会在这个地址上 bind 监听，
+        // 少了它会直接 `listen tcp6 ...: bind: cannot assign requested address` 起不来。
+        // 「不让 v6 流量进 tun」是靠在下面跳过 ::/0 路由实现的，见 ENABLE_TUN_IPV6。
         val inet6Address = options.inet6Address
         while (inet6Address.hasNext()) {
             val address = inet6Address.next()
@@ -101,23 +118,31 @@ class VPNService :
                     builder.addRoute("0.0.0.0", 0)
                 }
 
-                val inet6RouteAddress = options.inet6RouteAddress
-                if (inet6RouteAddress.hasNext()) {
-                    while (inet6RouteAddress.hasNext()) {
-                        builder.addRoute(inet6RouteAddress.next().toIpPrefix())
-                    }
-                } else if (options.inet6Address.hasNext()) {
-                    builder.addRoute("::", 0)
-                }
-
                 val inet4RouteExcludeAddress = options.inet4RouteExcludeAddress
                 while (inet4RouteExcludeAddress.hasNext()) {
                     builder.excludeRoute(inet4RouteExcludeAddress.next().toIpPrefix())
                 }
 
-                val inet6RouteExcludeAddress = options.inet6RouteExcludeAddress
-                while (inet6RouteExcludeAddress.hasNext()) {
-                    builder.excludeRoute(inet6RouteExcludeAddress.next().toIpPrefix())
+                // tailnet 的 v6 段始终放进 tun：tailscale 用 fd7a:115c:a1e0::/48，
+                // 放行它既能用 v6 访问 tailnet 设备，又不会让其它 App 拿到
+                // 「有路由但出不去」的 IPv6（那是抖音刷不出视频的根因）。
+                // 注意 Builder.addRoute 收的是「地址 + 前缀长度」，地址里不能带 "/48"。
+                builder.addRoute("fd7a:115c:a1e0::", 48)
+
+                if (ENABLE_TUN_IPV6) {
+                    val inet6RouteAddress = options.inet6RouteAddress
+                    if (inet6RouteAddress.hasNext()) {
+                        while (inet6RouteAddress.hasNext()) {
+                            builder.addRoute(inet6RouteAddress.next().toIpPrefix())
+                        }
+                    } else if (options.inet6Address.hasNext()) {
+                        builder.addRoute("::", 0)
+                    }
+
+                    val inet6RouteExcludeAddress = options.inet6RouteExcludeAddress
+                    while (inet6RouteExcludeAddress.hasNext()) {
+                        builder.excludeRoute(inet6RouteExcludeAddress.next().toIpPrefix())
+                    }
                 }
             } else {
                 val inet4RouteAddress = options.inet4RouteRange
@@ -128,12 +153,16 @@ class VPNService :
                     }
                 }
 
-                val inet6RouteAddress = options.inet6RouteRange
-                if (inet6RouteAddress.hasNext()) {
+                // 与上面的 TIRAMISU 分支同策略：默认不让 tun 承载 v6，
+                // 否则 App 缓存的 v6 地址会「进 tun 再静默失败」；只放行 tailnet 段。
+                if (ENABLE_TUN_IPV6) {
+                    val inet6RouteAddress = options.inet6RouteRange
                     while (inet6RouteAddress.hasNext()) {
                         val address = inet6RouteAddress.next()
                         builder.addRoute(address.address(), address.prefix())
                     }
+                } else {
+                    builder.addRoute("fd7a:115c:a1e0::", 48)
                 }
             }
 

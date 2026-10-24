@@ -58,8 +58,6 @@ interface PlatformInterfaceWrapper : PlatformInterface {
         error("android: tun inbound requires VPN service")
     }
 
-    override fun useProcFS(): Boolean = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
-
     @RequiresApi(Build.VERSION_CODES.Q)
     override fun findConnectionOwner(
         ipProtocol: Int,

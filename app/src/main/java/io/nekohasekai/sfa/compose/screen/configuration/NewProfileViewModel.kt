@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.nekohasekai.libbox.Libbox
 import io.nekohasekai.sfa.R
+import io.nekohasekai.sfa.bg.TsConfigMerger
 import io.nekohasekai.sfa.bg.UpdateProfileWork
 import io.nekohasekai.sfa.database.Profile
 import io.nekohasekai.sfa.database.ProfileManager
@@ -300,7 +301,9 @@ class NewProfileViewModel(application: Application) : AndroidViewModel(applicati
         typedProfile.path = configFile.path
 
         // Fetch initial config - this MUST succeed for remote profiles
-        val content = HTTPClient().use { it.getString(state.remoteUrl) }
+        val rawContent = HTTPClient().use { it.getString(state.remoteUrl) }
+        // 机场订阅多为旧版 DNS 写法，先迁移再校验，否则新版内核直接拒绝导入
+        val content = TsConfigMerger.migrateForProfile(rawContent)
         Libbox.checkConfig(content)
         val configContent = content
 

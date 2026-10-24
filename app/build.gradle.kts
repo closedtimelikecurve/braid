@@ -57,10 +57,13 @@ fun getVersionProps(propName: String): String {
     return ""
 }
 
+// 原 build 目录被系统进程锁住无法清理，换一个输出目录
+layout.buildDirectory.set(file("build-out"))
+
 android {
     namespace = "io.nekohasekai.sfa"
     compileSdk = 37
-    compileSdkMinor = 1
+    compileSdkMinor = 2
 
     ndkVersion = "28.0.13004108"
 
@@ -72,12 +75,18 @@ android {
     }
 
     defaultConfig {
-        applicationId = "io.nekohasekai.sfa"
+        applicationId = "io.nekohasekai.sfa.ts"  // 带 .ts 后缀：与官方 SFA 共存，互不覆盖
         minSdk = 24
         targetSdk = 37
-        versionCode = getVersionProps("VERSION_CODE").toInt()
-        versionName = getVersionProps("VERSION_NAME")
-        base.archivesName.set("SFA-${versionName}")
+        // versionCode 直接用「epoch 10 秒」，天然单调递增。
+        //
+        // 原来的写法是 `基线 * 10000 + 构建分钟数 % 10000`，每约 7 天就会绕回一次，
+        // 绕回后新包的 versionCode 比已安装的小，系统直接 INSTALL_FAILED_VERSION_DOWNGRADE，
+        // 自动更新也会永远提示「已是最新」。2026-10-24 已经踩过一次。
+        // 10 秒粒度保证同一分钟内连续构建也能覆盖安装（vivo 要求 versionCode 必变）。
+        versionCode = (System.currentTimeMillis() / 10_000L).toInt()
+        versionName = getVersionProps("VERSION_NAME") + "-ts"
+        base.archivesName.set("Braid-${versionName}")
     }
 
     signingConfigs {
@@ -222,6 +231,7 @@ dependencies {
         exclude(group = "com.google.guava", module = "guava")
     }
     implementation("com.google.guava:guava:33.6.0-android")
+    implementation("com.google.code.gson:gson:2.11.0")  // 配置合并用
 
     // API 24+ dependencies (play/other)
     "playImplementation"("androidx.lifecycle:lifecycle-livedata-ktx:$lifecycleVersion24")

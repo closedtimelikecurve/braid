@@ -75,7 +75,8 @@ class UpdateProfileWork {
                     continue
                 }
                 try {
-                    val content = HTTPClient().use { it.getString(profile.typed.remoteURL) }
+                    val rawContent = HTTPClient().use { it.getString(profile.typed.remoteURL) }
+                    val content = TsConfigMerger.migrateForProfile(rawContent)
                     Libbox.checkConfig(content)
                     val file = File(profile.typed.path)
                     if (file.readText() != content) {

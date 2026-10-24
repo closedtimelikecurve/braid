@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  只为自建更新源放行明文 HTTP：
+  自建服务一般用 `python -m http.server` 之类提供 APK，没有证书，走 https 不现实。
+  APK 本身有签名校验，明文下载不会带来「被换成别家 App 装上」的风险
+  （换包就签不上，安装会被系统拒绝）。
+
+  ts.net 已放行（经 MagicDNS 直连 tailnet 内设备最方便）。
+  用 IP/其它域名提供更新源的话，在下面加一行：
+      <domain includeSubdomains="false">你的主机</domain>
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">ts.net</domain>
+    </domain-config>
+</network-security-config>

@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
     <!-- App -->
-    <string name="app_name" translatable="false">sing-box</string>
+    <string name="app_name" translatable="false">Braid</string>
     <string name="app_version_title">應用程式版本</string>
     <string name="language">語言</string>
     <string name="system_default">跟隨系統</string>
@@ -675,4 +675,12 @@
     <string name="taildrop_dismiss">關閉</string>
     <string name="taildrop_open_app">開啟 sing-box</string>
     <string name="taildrop_notification_title">正在傳送檔案</string>
+    <string name="ts_auth_key">Tailscale Auth Key</string>
+    <string name="ts_auth_key_set">已设置（%1$s），重启服务后生效</string>
+    <string name="ts_auth_key_not_set">未设置。留空可在 Tailscale 端点页交互式登录（打开链接或扫码）</string>
+    <string name="ts_auth_key_description">粘贴可重用（Reusable）的 auth key：在 login.tailscale.com → Settings → Keys 生成。留空则走交互式登录。保存后重启服务生效。</string>
+    <string name="ts_auth_key_clear">清除</string>
+    <string name="self_update_url">自建更新源</string>
+    <string name="self_update_url_not_set">未配置。将退回上游渠道（GitHub / F-Droid）检查更新</string>
+    <string name="self_update_url_description">填入你自己服务器上 version.json 清单的完整 URL，例如 http://192.168.1.10:8088/braid/version.json。留空 = 停用。发布方法见仓库文档。</string>
 </resources>

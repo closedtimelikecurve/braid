@@ -41,6 +41,7 @@ import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.NewReleases
@@ -85,6 +86,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
@@ -152,6 +154,10 @@ fun AppSettingsScreen(
     var currentTrack by remember { mutableStateOf(Settings.updateTrack) }
     var showGitHubTokenDialog by remember { mutableStateOf(false) }
     var githubToken by remember { mutableStateOf(Settings.githubToken) }
+    var showTsAuthKeyDialog by remember { mutableStateOf(false) }
+    var tsAuthKey by remember { mutableStateOf(Settings.tsAuthKey) }
+    var showSelfUpdateUrlDialog by remember { mutableStateOf(false) }
+    var selfUpdateUrl by remember { mutableStateOf(Settings.tailnetUpdateUrl) }
     var checkUpdateEnabled by remember { mutableStateOf(Settings.checkUpdateEnabled) }
     var showErrorDialog by remember { mutableStateOf<String?>(null) }
 
@@ -277,6 +283,34 @@ fun AppSettingsScreen(
                 showGitHubTokenDialog = false
             },
             onDismiss = { showGitHubTokenDialog = false },
+        )
+    }
+
+    if (showTsAuthKeyDialog) {
+        TsAuthKeyDialog(
+            currentKey = tsAuthKey,
+            onSave = { key ->
+                tsAuthKey = key
+                scope.launch(Dispatchers.IO) {
+                    Settings.tsAuthKey = key
+                }
+                showTsAuthKeyDialog = false
+            },
+            onDismiss = { showTsAuthKeyDialog = false },
+        )
+    }
+
+    if (showSelfUpdateUrlDialog) {
+        SelfUpdateUrlDialog(
+            currentUrl = selfUpdateUrl,
+            onSave = { url ->
+                selfUpdateUrl = url
+                scope.launch(Dispatchers.IO) {
+                    Settings.tailnetUpdateUrl = url
+                }
+                showSelfUpdateUrlDialog = false
+            },
+            onDismiss = { showSelfUpdateUrlDialog = false },
         )
     }
 
@@ -671,6 +705,40 @@ fun AppSettingsScreen(
             ListItem(
                 headlineContent = {
                     Text(
+                        stringResource(R.string.ts_auth_key),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                },
+                supportingContent = {
+                    Text(
+                        if (tsAuthKey.isNotBlank()) {
+                            stringResource(R.string.ts_auth_key_set, "••••" + tsAuthKey.takeLast(4))
+                        } else {
+                            stringResource(R.string.ts_auth_key_not_set)
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                },
+                leadingContent = {
+                    Icon(
+                        imageVector = Icons.Outlined.Key,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                },
+                modifier =
+                Modifier
+                    .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
+                    .clickable { showTsAuthKeyDialog = true },
+                colors =
+                ListItemDefaults.colors(
+                    containerColor = Color.Transparent,
+                ),
+            )
+            ListItem(
+                headlineContent = {
+                    Text(
                         stringResource(R.string.tailscale_terminal_config),
                         style = MaterialTheme.typography.bodyLarge,
                     )
@@ -684,7 +752,7 @@ fun AppSettingsScreen(
                 },
                 modifier =
                 Modifier
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp))
                     .clickable { navController.navigate("settings/tailscale/terminal_config") },
                 colors =
                 ListItemDefaults.colors(
@@ -916,6 +984,41 @@ fun AppSettingsScreen(
                         ),
                     )
                 }
+
+                // 自建更新源：填完整清单 URL 才启用，空 = 跳过自建检查退回上游渠道。
+                // 公开发布的包不内置任何服务器地址，谁都可以配自己的源
+                ListItem(
+                    headlineContent = {
+                        Text(
+                            stringResource(R.string.self_update_url),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                    },
+                    supportingContent = {
+                        Text(
+                            if (selfUpdateUrl.isNotBlank()) selfUpdateUrl
+                            else stringResource(R.string.self_update_url_not_set),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
+                    leadingContent = {
+                        Icon(
+                            imageVector = Icons.Outlined.Dns,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    },
+                    modifier =
+                    updateItemModifier()
+                        .clickable { showSelfUpdateUrlDialog = true },
+                    colors =
+                    ListItemDefaults.colors(
+                        containerColor = Color.Transparent,
+                    ),
+                )
 
                 if (Vendor.hasCustomUpdate && !isFDroid) {
                     ListItem(
@@ -1468,6 +1571,111 @@ private fun UpdateTrackDialog(
         confirmButton = {
             TextButton(onClick = onDismiss) {
                 Text(stringResource(android.R.string.cancel))
+            }
+        },
+    )
+}
+
+/**
+ * 自建更新源 URL 弹窗。保存空值 = 停用自建源检查。
+ */
+@Composable
+private fun SelfUpdateUrlDialog(
+    currentUrl: String,
+    onSave: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var url by remember(currentUrl) { mutableStateOf(currentUrl) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.self_update_url)) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = url,
+                    onValueChange = { url = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    stringResource(R.string.self_update_url_description),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(url.trim()) }) {
+                Text(stringResource(R.string.save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+    )
+}
+
+/**
+ * tailscale auth key 填入弹窗。保存空值 = 清除（回到交互式登录）。
+ * key 是敏感信息：输入默认打码、可切换明文；展示时只显示末 4 位。
+ */
+@Composable
+private fun TsAuthKeyDialog(
+    currentKey: String,
+    onSave: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var key by remember(currentKey) { mutableStateOf(currentKey) }
+    var keyVisible by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.ts_auth_key)) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = key,
+                    onValueChange = { key = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { keyVisible = !keyVisible }) {
+                            Icon(
+                                imageVector = if (keyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                contentDescription = null,
+                            )
+                        }
+                    },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    stringResource(R.string.ts_auth_key_description),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(key.trim()) }) {
+                Text(stringResource(R.string.save))
+            }
+        },
+        dismissButton = {
+            if (currentKey.isNotBlank()) {
+                TextButton(onClick = { onSave("") }) {
+                    Text(stringResource(R.string.ts_auth_key_clear))
+                }
+            } else {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.cancel))
+                }
             }
         },
     )

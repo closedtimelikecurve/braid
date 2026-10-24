@@ -32,6 +32,7 @@ import io.nekohasekai.sfa.compose.MainActivity
 import io.nekohasekai.sfa.constant.Action
 import io.nekohasekai.sfa.constant.Alert
 import io.nekohasekai.sfa.constant.Status
+import io.nekohasekai.sfa.database.Profile
 import io.nekohasekai.sfa.database.ProfileManager
 import io.nekohasekai.sfa.database.Settings
 import io.nekohasekai.sfa.ktx.hasPermission
@@ -52,6 +53,9 @@ class BoxService(private val service: Service, private val platformInterface: Pl
     companion object {
         private const val PROFILE_UPDATE_INTERVAL = 15L * 60 * 1000 // 15 minutes in milliseconds
         private const val TAG = "BoxService"
+
+        /** 内核日志落盘上限，超过就清空重来，避免长期挂机塞满内部存储 */
+        private const val MAX_LOG_BYTES = 4L * 1024 * 1024
 
         @OptIn(DelicateCoroutinesApi::class)
         fun start() = GlobalScope.launch(Dispatchers.Main.immediate) {
@@ -118,6 +122,21 @@ class BoxService(private val service: Service, private val platformInterface: Pl
 
     private var lastProfileName = ""
 
+    /**
+     * 读配置并注入 tailscale。注入失败时由 safeMergeForBox 逐级降级
+     * （完整合并 → 仅语法迁移 → 原文），旧语法订阅最坏情况下代理仍可用；
+     * 合并结果落盘 debug-merged.json 供排障。
+     */
+    private fun loadMergedConfig(profile: Profile): String {
+        val rawContent = runCatching { File(profile.typed.path).readText() }.getOrDefault("")
+        val content = TsConfigMerger.safeMergeForBox(
+            rawContent,
+            File(Application.application.filesDir, "tailscale").absolutePath,
+        ) { Log.w(TAG, it) }
+        runCatching { File(Application.application.filesDir, "debug-merged.json").writeText(content) }
+        return content
+    }
+
     private suspend fun startService() {
         try {
             withContext(Dispatchers.Main) {
@@ -136,7 +155,7 @@ class BoxService(private val service: Service, private val platformInterface: Pl
                 return
             }
 
-            val content = File(profile.typed.path).readText()
+            val content = loadMergedConfig(profile)
             if (content.isBlank()) {
                 stopAndAlert(Alert.EmptyConfiguration)
                 return
@@ -225,7 +244,7 @@ class BoxService(private val service: Service, private val platformInterface: Pl
             return
         }
 
-        val content = File(profile.typed.path).readText()
+        val content = loadMergedConfig(profile)
         if (content.isBlank()) {
             stopAndAlert(Alert.EmptyConfiguration)
             return
@@ -302,6 +321,7 @@ class BoxService(private val service: Service, private val platformInterface: Pl
             }
             DefaultNetworkMonitor.stop()
             closeService()
+            closeLog()
             commandServer.apply {
                 close()
 //                Seq.destroyRef(refnum)
@@ -325,6 +345,13 @@ class BoxService(private val service: Service, private val platformInterface: Pl
         }
     }
 
+    private fun closeLog() {
+        synchronized(logLock) {
+            runCatching { logWriter?.close() }
+            logWriter = null
+        }
+    }
+
     private suspend fun stopAndAlert(type: Alert, message: String? = null) {
         Settings.startedByUser = false
         Settings.dataStore.flush()
@@ -338,6 +365,7 @@ class BoxService(private val service: Service, private val platformInterface: Pl
             closeService()
             commandServer.close()
         }
+        closeLog()
         withContext(Dispatchers.Main) {
             if (receiverRegistered) {
                 service.unregisterReceiver(receiver)
@@ -453,8 +481,38 @@ class BoxService(private val service: Service, private val platformInterface: Pl
     }
 
     override fun writeDebugMessage(message: String?) {
-        Log.d("sing-box", message!!)
+        if (message == null) return
+        Log.d("sing-box", message)
+        // 界面日志是环形缓冲，排障时不够用；同步落盘一份，方便 adb 直接 grep。
+        // 内核每秒能刷出几十行，用常驻 BufferedWriter 避免每行都开/关文件；
+        // 每行 flush 保证 run-as cat 随时能拉到最新内容，超上限就地轮转。
+        synchronized(logLock) {
+            runCatching {
+                val logFile = File(Application.application.filesDir, "singbox.log")
+                if (logWriter == null) {
+                    if (logFile.length() > MAX_LOG_BYTES) logFile.delete()
+                    logBytes = if (logFile.exists()) logFile.length() else 0L
+                    logWriter = java.io.BufferedWriter(
+                        java.io.OutputStreamWriter(java.io.FileOutputStream(logFile, true)),
+                        8 * 1024,
+                    )
+                }
+                logWriter!!.write(message)
+                logWriter!!.newLine()
+                logWriter!!.flush()
+                logBytes += message.length + 1
+                if (logBytes > MAX_LOG_BYTES) {
+                    logWriter!!.close()
+                    logWriter = null
+                    logFile.delete()
+                }
+            }
+        }
     }
+
+    private val logLock = Any()
+    private var logWriter: java.io.BufferedWriter? = null
+    private var logBytes = 0L
 
     override fun connectSSHAgent(): Int = -1
 }
